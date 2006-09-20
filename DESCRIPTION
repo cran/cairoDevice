@@ -1,5 +1,5 @@
 Package: cairoDevice
-Version: 1.2-1
+Version: 2.0
 Date:    2006/9/20
 Title: Loadable cairo device driver for R
 Author:  Michael Lawrence, Lyndon Drake
@@ -8,4 +8,4 @@ Suggests: RGtk2
 Maintainer: Michael Lawrence <lawremi@iastate.edu>
 Description: Cairo/GTK graphics device driver that, in addition to standalone functionality, can be used to create devices as embedded components in a GUI using a Gtk drawing area widget, e.g. using RGtk.
 License: GPL
-Packaged: Fri Mar  9 16:49:32 2007; larman
+Packaged: Tue Apr 10 23:17:36 2007; hornik
