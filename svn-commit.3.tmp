@@ -1,0 +1,10 @@
+Cleaning up the cairoDevice, getting ready for release of 2.0.
+--This line, and those below, will be ignored--
+
+M    R/cairoDevice.R
+M    DESCRIPTION
+M    src/cairoDevice.h
+M    src/cairoDevice.c
+M    man/Cairo.Rd
+M    man/asCairoDevice.Rd
+D    inst

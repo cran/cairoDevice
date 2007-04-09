@@ -1,9 +1,13 @@
 #include <gtk/gtk.h>
 
+#include <cairo.h>
+
 /* extra backends */
+#if CAIRO_VERSION > CAIRO_VERSION_ENCODE(1,2,0)
 #include <cairo-pdf.h>
 #include <cairo-ps.h>
 #include <cairo-svg.h>
+#endif
 
 #include <locale.h>
 
