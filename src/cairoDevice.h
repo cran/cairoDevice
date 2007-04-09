@@ -12,11 +12,26 @@
 #include <locale.h>
 
 #include <R.h>
+#include <Rversion.h>
 #include <Rinternals.h>
 #include <Rgraphics.h>
 #include <Rdevices.h>
 #include <R_ext/GraphicsDevice.h>
 #include <R_ext/GraphicsEngine.h>
+
+typedef struct _Cairo_locator_info {
+    guint x;
+    guint y;
+    gboolean button1;
+    guint handler_id;
+    gboolean active;
+} CairoLocator;
+
+typedef struct _CairoEvent {
+  SEXP rho;
+  SEXP result;
+  gboolean active;
+} CairoEvent;
 
 typedef struct {
 	GtkWidget *window;			/* Graphics frame */
@@ -24,9 +39,10 @@ typedef struct {
 	GdkPixmap *pixmap;			/* off-screen drawable */
 	cairo_t *cr;				/* the cairo context to which we draw */
   cairo_surface_t *surface; /* if non-NULL we have an alt surface like svg */
-  gchar *filename;
-	gint width, height;
-  SEXP eventRho, eventResult;
+  gchar *filename; /* filename for certain Cairo backends */
+	gint width, height; /* width and height of device */
+  CairoEvent *event; /* stores information for 'getGraphicsEvent' support */
+  CairoLocator *locator; /* stores information for 'locator' support */
 } CairoDesc;
 
 /* Device driver actions */
@@ -76,6 +92,9 @@ static Rboolean Cairo_OpenEmbedded(NewDevDesc*, CairoDesc*, GtkWidget*);
 #define BEGIN_SUSPEND_INTERRUPTS
 #define END_SUSPEND_INTERRUPTS
 
+void	R_WriteConsole(char*, int);
+
+#if defined(R_VERSION) && R_VERSION < R_Version(2, 6, 0)
 /* R mouse events from non-public Graphics.h */
 typedef enum {meMouseDown = 0,
 	      meMouseUp,
@@ -83,8 +102,6 @@ typedef enum {meMouseDown = 0,
         
 SEXP doMouseEvent(SEXP eventRho, NewDevDesc *dd, R_MouseEvent event,
 			 int buttons, double x, double y);
-
-void	R_WriteConsole(char*, int);
 
 /* and the key events */
 typedef enum {knUNKNOWN = -1,
@@ -94,6 +111,7 @@ typedef enum {knUNKNOWN = -1,
               knPGUP, knPGDN, knEND, knHOME, knINS, knDEL} R_KeyName;
            
 SEXP doKeybd(SEXP eventRho, NewDevDesc *dd, R_KeyName rkey, char *keyname);
+#endif
 
 /* event handler */
 void R_gtk_eventHandler(void *userData);
