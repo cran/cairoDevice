@@ -215,9 +215,11 @@ static void kill_cairo(NewDevDesc *dd)
 
 static void unrealize_cb(GtkWidget *widget, NewDevDesc *dd) {
   g_return_if_fail(dd != NULL);
-  /* don't try to destroy the widget */
-  ((CairoDesc *) dd->deviceSpecific)->drawing = NULL;
-  kill_cairo(dd);
+  if (dd->deviceSpecific) { /* make sure not called from freeCairoDesc */
+    /* don't try to destroy the widget, since it's already being destroyed */
+    ((CairoDesc *) dd->deviceSpecific)->drawing = NULL;
+    kill_cairo(dd);
+  }
 }
 static gint delete_event(GtkWidget *widget, GdkEvent *event, NewDevDesc *dd)
 {
