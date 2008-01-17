@@ -47,4 +47,6 @@ void loadGTK(int *success)
       gtk_disable_setlocale();
       *success = gtk_init_check(&argc, &argv);
     }
+    g_free(argv[0]);
+    g_free(argv);
 }
