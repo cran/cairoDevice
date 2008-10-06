@@ -10,10 +10,6 @@
   #library.dynam("cairoDevice", pkgname, libname)
   if (!.C("loadGTK", success = logical(1), PACKAGE="cairoDevice")$success)
     message("Note: R session is headless; Cairo device not initialized")
-  else {
-    .C("R_gtk_setEventHandler", PACKAGE="cairoDevice")
-    options(device="Cairo")
-  }
 
   # register device as being interactive
   deviceIsInteractive("Cairo")
@@ -32,7 +28,7 @@
 {
   windows_config <- list(
     source = F,
-    gtk_url = "http://downloads.sourceforge.net/gladewin32/gtk-2.10.11-win32-1.exe",
+    gtk_url = "http://downloads.sourceforge.net/gladewin32/gtk-2.12.9-win32-2.exe",
     installer = function(path) {
       shell(path)
     }
@@ -66,7 +62,7 @@
         stop("Failed to download ", dep_name)
       installer(path)
     }
-    print(paste("Learn more about", dep_name, "at", dep_web))
+    message(paste("Learn more about", dep_name, "at", dep_web))
   }
   
   install_all <- function() {
@@ -85,5 +81,5 @@
   
   install_all()
   
-  print("PLEASE RESTART R BEFORE TRYING TO LOAD THE PACKAGE AGAIN")
+  message("PLEASE RESTART R BEFORE TRYING TO LOAD THE PACKAGE AGAIN")
 }

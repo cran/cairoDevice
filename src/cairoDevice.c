@@ -404,36 +404,29 @@ static Rboolean Cairo_Open(pDevDesc dd, CairoDesc *cd,	double w, double h,
 
 static PangoFontDescription *getFont(CairoDesc *cd, const pGEcontext gc)
 {
-  PangoFontDescription *fontdesc, *basedesc;
-  gint size, face = gc->fontface;
-    
-  if (face < 1 || face > 5)
-    face = 1;
+  PangoFontDescription *fontdesc;
+  gint face = gc->fontface;
+  double size = gc->cex * gc->ps;
 
-  size = gc->cex * gc->ps + 0.5;
-	
-  basedesc = getBaseFont(cd);
+  if (face < 1 || face > 5) face = 1;
+
   fontdesc = pango_font_description_new();
-  if (face == SYMBOL_FONTFACE) {
+  if (face == 5)
     pango_font_description_set_family(fontdesc, "symbol");
-  } else {
-    if (strlen(gc->fontfamily))
-      pango_font_description_set_family(fontdesc, gc->fontfamily);
-    pango_font_description_set_weight(fontdesc, weight[(face-1)%2]);
-    pango_font_description_set_style(fontdesc, slant[((face-1)/2)%2]);
+  else {
+    char *fm = gc->fontfamily;
+    /*if(!strcmp(fm, "mono")) fm = "courier";
+    else if(!strcmp(fm, "serif")) fm = "times";
+    else if(!strcmp(fm, "sans")) fm = "helvetica";*/
+    pango_font_description_set_family(fontdesc, fm[0] ? fm : "Verdana");
+    if(face == 2 || face == 4)
+      pango_font_description_set_weight(fontdesc, PANGO_WEIGHT_BOLD);
+    if(face == 3 || face == 4)
+      pango_font_description_set_style(fontdesc, PANGO_STYLE_OBLIQUE);
   }
   pango_font_description_set_size(fontdesc, PANGO_SCALE * size);
-  pango_font_description_merge(fontdesc, basedesc, FALSE);
-	
-  if (!loadFont(fontdesc, cd)) {
-    char *strdesc = pango_font_description_to_string(fontdesc);
-    fprintf(stderr, "Could not find font '%s', falling back to base font!\n", strdesc);
-    g_free(strdesc);
-    pango_font_description_free(fontdesc);
-    fontdesc = basedesc;
-  } else pango_font_description_free(basedesc);
-	
-  return(fontdesc);
+
+  return fontdesc;
 }
 
 static PangoLayout *layoutText(PangoFontDescription *desc, const char *str, 
@@ -443,9 +436,10 @@ static PangoLayout *layoutText(PangoFontDescription *desc, const char *str,
 	
   //pango_cairo_update_context(cd->cr, cd->pango);
   //layout = pango_layout_new(cd->pango);
-  if (cd->drawing)
+  /*if (cd->drawing)
     layout = gtk_widget_create_pango_layout(cd->drawing, NULL);
-  else layout = pango_layout_new(gdk_pango_context_get());
+    else layout = pango_layout_new(gdk_pango_context_get());*/
+  layout = pango_cairo_create_layout(cd->cr);
   pango_layout_set_font_description(layout, desc);
   pango_layout_set_text(layout, str, -1);
   return(layout);
@@ -455,26 +449,40 @@ static void
 text_extents(PangoFontDescription *desc, CairoDesc *cd, const pGEcontext gc, 
              const gchar *text,
 	     gint *lbearing, gint *rbearing, 
-	     gint *width, gint *ascent, gint *descent)
+	     gint *width, gint *ascent, gint *descent, gboolean ink)
 {
   PangoLayout *layout;
-  PangoRectangle rect;
+  PangoRectangle rect, irect;
 	
   layout = layoutText(desc, text, cd);
   
-  pango_layout_line_get_pixel_extents(pango_layout_get_line(layout, 0), NULL, &rect);
+  pango_layout_line_get_pixel_extents(pango_layout_get_line(layout, 0), &irect,
+                                      &rect);
 
-  if(ascent)
-    *ascent = PANGO_ASCENT(rect);
-  if(descent)
-    *descent = PANGO_DESCENT(rect);
-  if(width)
-    *width = rect.width;
-  if(lbearing)
-    *lbearing = PANGO_LBEARING(rect);
-  if(rbearing)
-    *rbearing = PANGO_RBEARING(rect);
-	
+  if (!ink) {
+    if(ascent)
+      *ascent = PANGO_ASCENT(rect);
+    if(descent)
+      *descent = PANGO_DESCENT(rect);
+    if(width)
+      *width = rect.width;
+    if(lbearing)
+      *lbearing = PANGO_LBEARING(rect);
+    if(rbearing)
+      *rbearing = PANGO_RBEARING(rect);
+  } else {
+    if(ascent)
+      *ascent = PANGO_ASCENT(irect);
+    if(descent)
+      *descent = PANGO_DESCENT(irect);
+    if(width)
+      *width = irect.width;
+    if(lbearing)
+      *lbearing = PANGO_LBEARING(irect);
+    if(rbearing)
+      *rbearing = PANGO_RBEARING(irect);
+  }
+  
   g_object_unref(layout);
 }
 
@@ -573,7 +581,7 @@ static double Cairo_StrWidth(const char *str, const pGEcontext gc, pDevDesc dd)
   CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
 	
   PangoFontDescription *desc = getFont(cd, gc);
-  text_extents(desc, cd, gc, str, NULL, NULL, &width, NULL, NULL);
+  text_extents(desc, cd, gc, str, NULL, NULL, &width, NULL, NULL, FALSE);
   pango_font_description_free(desc);
 	
   return (double) width;
@@ -591,15 +599,17 @@ static void Cairo_MetricInfo(int c, const pGEcontext gc,
 	
   if (!c) 
     font_metrics(desc, cd, &iwidth, &iascent, &idescent);
-  else {
-      if(c < 0) {c = -c; Unicode = 1;} 
-      
-      if(Unicode || c >= 128)
-	  Rf_ucstoutf8(text, c);
-      else
-	  g_snprintf(text, 2, "%c", (gchar) c);
-      text_extents(desc, cd, gc, text, NULL, NULL, &iwidth, &iascent, &idescent);
-  }
+    else {
+  /*if (!c) c = 77;*/
+  if(c < 0) {c = -c; Unicode = 1;} 
+  
+  if(Unicode || c >= 128)
+    Rf_ucstoutf8(text, c);
+  else
+    g_snprintf(text, 2, "%c", (gchar) c);
+  text_extents(desc, cd, gc, text, NULL, NULL, &iwidth, &iascent, &idescent,
+               TRUE);
+      }
 	
   *ascent = iascent;
   *descent = idescent;
@@ -836,20 +846,20 @@ static void drawText(double x, double y, const char *str,
   PangoLayout *layout;
   gint ascent, lbearing;
   cairo_t *cr = cd->cr;
-	
+
   PangoFontDescription *desc = getFont(cd, gc);
 
-  // x and y seem a little off, correcting...
-  text_extents(desc, cd, gc, str, &lbearing, NULL, NULL, &ascent, NULL);
-	
+  layout = layoutText(desc, str, cd);
+  
+  text_extents(desc, cd, gc, str, &lbearing, NULL, NULL, &ascent, NULL, FALSE);
+
   cairo_move_to(cr, x, y);
   cairo_rotate(cr, -1*rot);
   cairo_rel_move_to(cr, -lbearing, -ascent);
   setColor(cr, gc->col);
-	
-  layout = layoutText(desc, str, cd);
+
   pango_cairo_show_layout(cr, layout);
-	
+  
   g_object_unref(layout);
   pango_font_description_free(desc);
 }
