@@ -17,7 +17,8 @@
 
 /* This is so that cairoDevice builds under R 2.7 and 2.9
    simultaneously. Remove after R 2.8 is released. */
-#ifndef NewDevDesc
+#include <Rversion.h>
+#if R_VERSION >= R_Version(2,8,0)
 # define NewDevDesc DevDesc
 #endif
 
