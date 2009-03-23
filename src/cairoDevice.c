@@ -24,9 +24,11 @@ void freeCairoDesc(pDevDesc dd) {
   
   if(cd->window)
     gtk_widget_destroy(cd->window);
-  
+
   if(cd->cr) {
-    cairo_show_page(cd->cr);
+    if (!cd->cr_custom)
+      cairo_show_page(cd->cr);
+    else cairo_restore(cd->cr);
     cairo_destroy(cd->cr);
   }
   
@@ -111,8 +113,10 @@ static gboolean initDevice(pDevDesc dd)
   }
   
   if(cd->cr) {
-    cairo_show_page(cd->cr);
-    cairo_destroy(cd->cr);
+    if (!cd->cr_custom) {
+      cairo_show_page(cd->cr);
+      cairo_destroy(cd->cr);
+    } else cairo_restore(cd->cr);
   }
   if(cd->pixmap && cd->drawing)
     g_object_unref(cd->pixmap);
@@ -123,6 +127,8 @@ static gboolean initDevice(pDevDesc dd)
       cd->pixmap = gdk_pixmap_new(cd->drawing->window, right, bottom, -1);
     if (cd->surface)
       cd->cr = cairo_create(cd->surface);
+    else if (cd->cr_custom)
+      cd->cr = cd->cr_custom;
     else cd->cr = gdk_cairo_create(cd->pixmap);
   //cairo_set_antialias(cd->cr, CAIRO_ANTIALIAS_NONE);
     //cd->pango = pango_cairo_font_map_create_context(
@@ -333,6 +339,19 @@ static Rboolean Cairo_OpenOffscreen(pDevDesc dd, CairoDesc *cd, GdkDrawable *dra
   initDevice(dd);		 
   return(TRUE);
 }
+
+static Rboolean Cairo_OpenCustom(pDevDesc dd, CairoDesc *cd, double w, double h,
+                                 cairo_t *cr)
+{
+  dd->deviceSpecific = cd;
+  cd->cr_custom = cairo_reference(cr);
+  cd->width = w;
+  cd->height = h;
+  // initialize
+  initDevice(dd);		 
+  return(TRUE);
+}
+
 static Rboolean Cairo_Open(pDevDesc dd, CairoDesc *cd,	double w, double h, 
                            const gchar **surface_info)
 {	
@@ -1084,11 +1103,14 @@ asCairoDevice(pDevDesc dd, double width, double height, double ps, void *data)
 
   if(!(cd = createCairoDesc()))
     return FALSE;
-	
-  if (GTK_IS_WIDGET(data))
-    success = Cairo_OpenEmbedded(dd, cd, GTK_WIDGET(data));
-  else success = Cairo_OpenOffscreen(dd, cd, GDK_DRAWABLE(data));
-  
+
+  if (width != -1) { // if width/height specified, we have custom context
+    success = Cairo_OpenCustom(dd, cd, width, height, (cairo_t *)data);
+  } else { // otherwise assume something from GTK
+    if (GTK_IS_WIDGET(data))
+      success = Cairo_OpenEmbedded(dd, cd, GTK_WIDGET(data));
+    else success = Cairo_OpenOffscreen(dd, cd, GDK_DRAWABLE(data));
+  }
   if (!success) {
     freeCairoDesc(dd);
     return FALSE;
@@ -1112,7 +1134,7 @@ initCairoDevice(double width, double height, double ps, void *data, CairoDeviceC
   R_CheckDeviceAvailable();
   BEGIN_SUSPEND_INTERRUPTS {
     /* Allocate and initialize the device driver data */
-    if (!(dev = (pDevDesc) calloc(1, sizeof(NewDevDesc))))
+    if (!(dev = (pDevDesc) calloc(1, sizeof(DevDesc))))
       return NULL;
     if (! init_fun (dev, width, height, ps, data)) {
       free(dev);
@@ -1152,14 +1174,11 @@ do_Cairo(double *in_width, double *in_height, double *in_pointsize, char **surfa
 
 
 SEXP
-do_asCairoDevice(SEXP widget, SEXP pointsize)
+do_asCairoDevice(SEXP widget, SEXP pointsize, SEXP width, SEXP height)
 {
-  void *drawing = R_ExternalPtrAddr(widget);
-  double ps;
-  SEXP ans = Rf_allocVector(LGLSXP, 1);
-
-  ps = REAL(pointsize)[0];
-  LOGICAL(ans)[0] = (initCairoDevice(-1, -1, ps, drawing, asCairoDevice) != NULL);
-
-  return(ans);
+  pDevDesc pd = initCairoDevice(asReal(width), asReal(height),
+                                asReal(pointsize),
+                                R_ExternalPtrAddr(widget),
+                                asCairoDevice);
+  return ScalarLogical(pd != NULL);
 }
