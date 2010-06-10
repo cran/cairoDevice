@@ -1,12 +1,64 @@
 #include "cairoDevice.h"
 
+// All measurements within this file are made in points (unless otherwise stated)
+#define POINTS_PER_INCH 72
 #define CURSOR		GDK_CROSSHAIR		/* Default cursor */
 #define MM_PER_INCH	25.4			/* mm -> inch conversion */
 
 static PangoStyle  slant[]  = { PANGO_STYLE_NORMAL, PANGO_STYLE_OBLIQUE };
 static PangoWeight weight[] = { PANGO_WEIGHT_NORMAL, PANGO_WEIGHT_BOLD };
 
-CairoDesc *createCairoDesc() {
+// Resolution is measured in dpi (dots per inch)
+double gResolutionX = 72;
+double gResolutionY = 72;
+
+// Sets resolution independently for X and Y directions 
+void
+setResolutionXY(double resX, double resY) {
+  //printf("Resolution was (%f,%f)\n", gResolutionX, gResolutionY);
+  gResolutionX = resX;
+  gResolutionY = resY;
+  //printf("Resolution is now (%f,%f)\n", gResolutionX, gResolutionY);
+}
+
+// Sets resolution assuming X and Y are identical
+void
+setResolution(double res) {
+  setResolutionXY(res,res);
+}
+
+// A function exposed to R allowing it to change the resolution
+SEXP 
+Cairo_Set_Resolution(SEXP res) {
+  double resolution = asReal(res);
+  setResolution(resolution);
+  return ScalarReal(resolution);
+}
+
+// Obtains X and Y resolutions of screen surface and updates global variables
+void
+setResolutionFromScreen() {
+  double width, widthMM;
+  double height, heightMM;  
+  double resX, resY;
+
+  // X direction
+  width = gdk_screen_width();
+  widthMM = gdk_screen_width_mm();
+  resX = width/widthMM * MM_PER_INCH;
+
+  // Y direction
+  height = gdk_screen_height();
+  heightMM = gdk_screen_height_mm();
+  resY = height/heightMM * MM_PER_INCH;
+
+  // Update global variables
+  setResolutionXY(resX, resY);
+}
+
+
+
+CairoDesc* createCairoDesc() {
   return(g_new0(CairoDesc, 1));
 }
 void freeCairoDesc(pDevDesc dd) {
@@ -56,22 +108,6 @@ static void activateDevice(pDevDesc dev)
   }
 }
 
-/** need the pixel width/height in inches so we can convert 
-    from R's inches to our pixels */
-static double pixelWidth(void)
-{
-  double width, widthMM;
-  width = gdk_screen_width();
-  widthMM = gdk_screen_width_mm();
-  return ((double)widthMM / (double)width) / MM_PER_INCH;
-}
-static double pixelHeight(void)
-{
-  double height, heightMM;
-  height = gdk_screen_height();
-  heightMM = gdk_screen_height_mm();
-  return ((double)heightMM / (double)height) / MM_PER_INCH;
-}
 
 static PangoContext *getPangoContext(CairoDesc *cd)
 {
@@ -99,6 +135,7 @@ static gboolean initDevice(pDevDesc dd)
   cd = (CairoDesc *) dd->deviceSpecific;
 	
   Cairo_Size(&left, &right, &bottom, &top, dd);
+  //printf("Cairo_Size returned (%f %f %f %f)\n", left, right, bottom, top);
   /*g_debug("%f %f %f %f" , left, right, bottom, top);*/
   dd->left = left;
   cd->width = dd->right = right;
@@ -123,20 +160,29 @@ static gboolean initDevice(pDevDesc dd)
   
   /* create pixmap and cairo context for drawing, save default state */
   if(right > 0 && bottom > 0) {
-    if (cd->drawing)
-      cd->pixmap = gdk_pixmap_new(cd->drawing->window, right, bottom, -1);
-    if (cd->surface)
+    if (cd->drawing) {
+      cd->pixmap = gdk_pixmap_new(cd->drawing->window, 
+				  right*gResolutionX/POINTS_PER_INCH, 
+				  bottom*gResolutionY/POINTS_PER_INCH, -1);
+    }
+    if (cd->surface) {
       cd->cr = cairo_create(cd->surface);
-    else if (cd->cr_custom)
+    }
+    else if (cd->cr_custom) {
       cd->cr = cd->cr_custom;
+    }
     else cd->cr = gdk_cairo_create(cd->pixmap);
   //cairo_set_antialias(cd->cr, CAIRO_ANTIALIAS_NONE);
     //cd->pango = pango_cairo_font_map_create_context(
     //				PANGO_CAIRO_FONT_MAP(pango_cairo_font_map_get_default()));
     //pango_cairo_context_set_resolution(cd->pango, 84);
-    cairo_save(cd->cr);
     /* sync the size with the device */
   }
+
+  // Change the CTM (current transformation matrix) to scale for different resolutions
+  cairo_scale(cd->cr, gResolutionX/POINTS_PER_INCH,gResolutionY/POINTS_PER_INCH);
+  //printf("  scaling by %f, %f\n", gResolutionX/POINTS_PER_INCH,gResolutionY/POINTS_PER_INCH);
+    cairo_save(cd->cr);
   
   return FALSE;
 }
@@ -170,8 +216,13 @@ static gint expose_event(GtkWidget *widget, GdkEventExpose *event, pDevDesc dd)
   g_return_val_if_fail(cd != NULL, FALSE);
   g_return_val_if_fail(GTK_IS_DRAWING_AREA(cd->drawing), FALSE);
 
-  if(cd->width != cd->drawing->allocation.width || cd->height != cd->drawing->allocation.height) 
+  gint current_width = ((double)cd->drawing->allocation.width/gResolutionX*POINTS_PER_INCH);
+  gint current_height = ((double)cd->drawing->allocation.height/gResolutionY*POINTS_PER_INCH);
+
+  if(cd->width != current_width
+     || cd->height != current_height) {
     resize(dd); 
+  }
   else if(cd->pixmap) {
     gdk_draw_drawable(cd->drawing->window, cd->drawing->style->bg_gc[GTK_STATE_NORMAL], 
                       cd->pixmap,
@@ -185,6 +236,7 @@ static gint expose_event(GtkWidget *widget, GdkEventExpose *event, pDevDesc dd)
   return FALSE;
 }
 
+#if R_GE_version < 7
 static void event_finish(pDevDesc dd)
 {
   CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
@@ -203,6 +255,7 @@ static void CairoEvent_onExit(pDevDesc dd)
 {
   event_finish(dd);
 }
+#endif
 
 /* converts the Gdk buttons to the button masks used by R's gevent.c */
 #define R_BUTTON(button) pow(2, (button) - 1)
@@ -210,47 +263,65 @@ static void CairoEvent_onExit(pDevDesc dd)
 
 static gboolean button_press_event(GtkWidget *widget, GdkEventButton *event, pDevDesc dd)
 {
-  CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
   if (dd->gettingEvent) {
+#if R_GE_version < 7
+    CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
     cd->event->result = doMouseEvent(cd->event->rho, dd, meMouseDown,
                                      R_BUTTON(event->button), event->x, event->y);
     event_maybe_finish(dd);
+#else
+    doMouseEvent(dd, meMouseDown, R_BUTTON(event->button), event->x, event->y);
+#endif
+
   }
   return(FALSE);
 }
 
 static gboolean button_release_event(GtkWidget *widget, GdkEventButton *event, pDevDesc dd)
 {
-  CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
   if (dd->gettingEvent) {
+#if R_GE_version < 7
+    CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
     cd->event->result = doMouseEvent(cd->event->rho, dd, meMouseUp,
                                      R_BUTTON(event->button), event->x, event->y);
     event_maybe_finish(dd);
+#else
+    doMouseEvent(dd, meMouseUp, R_BUTTON(event->button), event->x, event->y);
+#endif
   }
   return(FALSE);
 }
 
 static gboolean motion_notify_event(GtkWidget *widget, GdkEventMotion *event, pDevDesc dd)
 {
-  CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
   if (dd->gettingEvent) {
+#if R_GE_version < 7
+    CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
     cd->event->result = doMouseEvent(cd->event->rho, dd, meMouseMove,
                                      R_BUTTONS(event->state), event->x, event->y);
     event_maybe_finish(dd);
+#else
+    doMouseEvent(dd, meMouseMove, R_BUTTONS(event->state), event->x, event->y);
+#endif
   }
   return(FALSE);
 }
 
 static gboolean key_press_event(GtkWidget *widget, GdkEventKey *event, pDevDesc dd)
 {
-  CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
   if (dd->gettingEvent) {
+#if R_GE_version < 7
+    CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
     cd->event->result = doKeybd(cd->event->rho, dd, -1, gdk_keyval_name(event->keyval));
     event_maybe_finish(dd);
+#else
+    doKeybd(dd, -1, gdk_keyval_name(event->keyval));
+#endif
   }
   return(FALSE);
 }
 
+#if R_GE_version < 7
 static SEXP Cairo_GetEvent(SEXP rho, const char *prompt)
 {
   pGEDevDesc dd = GEcurrentDevice();
@@ -282,6 +353,25 @@ static SEXP Cairo_GetEvent(SEXP rho, const char *prompt)
   g_free(event);
   return result;
 }
+#else
+static void Cairo_EventHelper(pDevDesc dd, int code)
+{
+  if (code == 1) {
+    if (isEnvironment(dd->eventEnv)) {
+      SEXP prompt = findVar(install("prompt"), dd->eventEnv);
+      if (length(prompt) == 1) {
+        const char* cprompt = CHAR(asChar(prompt));
+        R_WriteConsole(cprompt, strlen(cprompt));
+        R_WriteConsole("\n", 1);
+        R_FlushConsole();
+      }
+    }
+  } else if (code == 2) 
+    R_gtk_eventHandler(NULL);
+  
+  return;
+}
+#endif
 
 static void kill_cairo(pDevDesc dd)
 {
@@ -361,13 +451,15 @@ static Rboolean Cairo_Open(pDevDesc dd, CairoDesc *cd,	double w, double h,
     cairo_surface_t *surface;
     double width, height;
     if (!strcmp(surface_info[0], "png")) {
-      width = w / pixelWidth();
-      height = h / pixelHeight();
+      width = w * gResolutionX/POINTS_PER_INCH;
+      height = h * gResolutionY/POINTS_PER_INCH;
       surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
       cd->filename = g_strdup(surface_info[1]);
     } else {
-      width = w*72.0;
-      height = h*72.0;
+      
+      setResolution(POINTS_PER_INCH);
+      width = w;
+      height = h;
 #ifdef CAIRO_HAS_PDF_SURFACE
       if (!strcmp(surface_info[0], "pdf"))
         surface = cairo_pdf_surface_create(surface_info[1], width, height);
@@ -388,16 +480,20 @@ static Rboolean Cairo_Open(pDevDesc dd, CairoDesc *cd,	double w, double h,
               return(FALSE);
             }
     }
-    cd->width = width;
-    cd->height = height;
+    cd->width = w;
+    cd->height = h;
     cd->surface = surface;
     return(TRUE);
   }
 
+  // Set resolution
+  setResolutionFromScreen(); 
+  
   cd->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_resizable(GTK_WINDOW(cd->window), TRUE);
   gtk_window_set_default_size(GTK_WINDOW(cd->window), 
-                              w / pixelWidth(), h / pixelHeight());
+                              w * gResolutionX/POINTS_PER_INCH, 
+			      h * gResolutionY/POINTS_PER_INCH);
 
   /* create drawingarea */
   cd->drawing = gtk_drawing_area_new();
@@ -417,7 +513,7 @@ static Rboolean Cairo_Open(pDevDesc dd, CairoDesc *cd,	double w, double h,
                    G_CALLBACK(key_press_event), dd);
   
   gtk_widget_show_all(cd->window);
-  
+
   return(TRUE);
 }
 
@@ -618,9 +714,9 @@ static void Cairo_MetricInfo(int c, const pGEcontext gc,
 	
   if (!c) 
     font_metrics(desc, cd, &iwidth, &iascent, &idescent);
-    else {
-  /*if (!c) c = 77;*/
-  if(c < 0) {c = -c; Unicode = 1;} 
+  else {
+    /*if (!c) c = 77;*/
+    if(c < 0) {c = -c; Unicode = 1;} 
   
   if(Unicode || c >= 128)
     Rf_ucstoutf8(text, c);
@@ -668,11 +764,16 @@ static void Cairo_Size(double *left, double *right, double *bottom, double *top,
      the new backing pixmap is not created until later */
   if (cd->drawing) {
     if (GTK_WIDGET_MAPPED(cd->drawing)) {
-      width = cd->drawing->allocation.width;
-      height = cd->drawing->allocation.height;
-    } else width = height = 1000; // hack to get R to draw before first exposure
-  } else if (GDK_IS_DRAWABLE(cd->pixmap))
+      width = (double)cd->drawing->allocation.width / gResolutionX * POINTS_PER_INCH ;
+      height = (double)cd->drawing->allocation.height / gResolutionY * POINTS_PER_INCH;
+    } else {
+      width = height = 1000; // hack to get R to draw before first exposure
+    }
+  } else if (GDK_IS_DRAWABLE(cd->pixmap)) {
     gdk_drawable_get_size(cd->pixmap, &width, &height);
+    width = (double)width / gResolutionX * POINTS_PER_INCH;
+    height = (double)height / gResolutionY * POINTS_PER_INCH;
+  }
 
   *left = 0.0;
   *right = (gdouble)width;
@@ -859,6 +960,120 @@ static void Cairo_Polygon(int n, double *x, double *y,
   cairo_restore(cd->cr);
 }
 
+/* Adapted from R's modules/X11/cairoX11.c */
+static void Cairo_Raster(unsigned int *raster, int w, int h,
+                         double x, double y, 
+                         double width, double height,
+                         double rot, 
+                         Rboolean interpolate,
+                         const pGEcontext gc, pDevDesc dd)
+{
+  char *vmax = vmaxget();
+  int i;
+  cairo_surface_t *image;
+  unsigned char *imageData;
+  CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
+  
+  imageData = (unsigned char *) R_alloc(4*w*h, sizeof(unsigned char));
+  /* The R ABGR needs to be converted to a Cairo ARGB 
+   * AND values need to by premultiplied by alpha 
+   */
+  for (i=0; i<w*h; i++) {
+    int alpha = R_ALPHA(raster[i]);
+    imageData[i*4 + 3] = alpha;
+    if (alpha < 255) {
+      imageData[i*4 + 2] = R_RED(raster[i]) * alpha / 255;
+      imageData[i*4 + 1] = R_GREEN(raster[i]) * alpha / 255;
+      imageData[i*4 + 0] = R_BLUE(raster[i]) * alpha / 255;
+    } else {
+      imageData[i*4 + 2] = R_RED(raster[i]);
+      imageData[i*4 + 1] = R_GREEN(raster[i]);
+      imageData[i*4 + 0] = R_BLUE(raster[i]);
+    }
+  }
+  image = cairo_image_surface_create_for_data(imageData, 
+                                              CAIRO_FORMAT_ARGB32,
+                                              w, h, 
+                                              4*w);
+
+  cairo_save(cd->cr);
+
+  cairo_translate(cd->cr, x, y);
+  cairo_rotate(cd->cr, -rot*M_PI/180);
+  cairo_scale(cd->cr, width/w, height/h);
+  /* Flip vertical first */
+  cairo_translate(cd->cr, 0, h/2.0);
+  cairo_scale(cd->cr, 1, -1);
+  cairo_translate(cd->cr, 0, -h/2.0);
+
+  cairo_set_source_surface(cd->cr, image, 0, 0);
+
+  /* Use nearest-neighbour filter so that a scaled up image
+   * is "blocky";  alternative is some sort of linear
+   * interpolation, which gives nasty edge-effects
+   */
+  if (!interpolate) {
+    cairo_pattern_set_filter(cairo_get_source(cd->cr), 
+                             CAIRO_FILTER_NEAREST);
+  }
+
+  cairo_paint(cd->cr); 
+
+  cairo_restore(cd->cr);
+  cairo_surface_destroy(image);
+
+  vmaxset(vmax);
+}
+
+static SEXP Cairo_Cap(pDevDesc dd)
+{
+  int i, j, k, nbytes, width, height, size, stride;
+  CairoDesc *cd = (CairoDesc *) dd->deviceSpecific;
+  unsigned char *screenData;
+  SEXP dim, raster = R_NilValue;
+  unsigned int *rint;
+  GdkPixbuf *pixbuf = NULL;
+  
+  if (!cd->pixmap)
+    return raster;
+
+  pixbuf =
+    gdk_pixbuf_get_from_drawable(NULL, cd->pixmap, NULL, 0, 0, 0, 0, -1, -1);
+
+  stride = gdk_pixbuf_get_rowstride(pixbuf);
+  width = gdk_pixbuf_get_width(pixbuf);
+  height = gdk_pixbuf_get_height(pixbuf);
+  screenData = gdk_pixbuf_get_pixels(pixbuf);
+  
+  /* Should not happen */
+  if (gdk_pixbuf_get_colorspace(pixbuf) != GDK_COLORSPACE_RGB ||
+      gdk_pixbuf_get_bits_per_sample(pixbuf) != 8 ||
+      gdk_pixbuf_get_has_alpha(pixbuf)) 
+    return raster;
+  
+  size = width*height;
+  nbytes = stride*height;
+
+  PROTECT(raster = allocVector(INTSXP, size));
+
+  /* Copy each byte of screen to an R matrix. 
+   * The Cairo RGB24 needs to be converted to an R ABGR32 */
+  rint = (unsigned int *) INTEGER(raster);
+  for (i = 0, k = 0; i < nbytes; i += stride)
+    for (j = i; j < i + width*3; j += 3)
+      rint[k++] = 255<<24 | ((screenData[j])<<16 | 
+                             (screenData[j + 1])<<8 |
+                             (screenData[j + 2]));
+  
+  PROTECT(dim = allocVector(INTSXP, 2));
+  INTEGER(dim)[0] = height;
+  INTEGER(dim)[1] = width;
+  setAttrib(raster, R_DimSymbol, dim);
+
+  UNPROTECT(2);
+  return raster;
+}
+
 static void drawText(double x, double y, const char *str, 
 		     double rot, double hadj, CairoDesc *cd, const pGEcontext gc)
 {
@@ -1009,10 +1224,16 @@ configureCairoDevice(pDevDesc dd, CairoDesc *cd, double width, double height, do
   dd->line = Cairo_Line;
   dd->polyline = Cairo_Polyline;
   dd->polygon = Cairo_Polygon;
+  dd->raster = Cairo_Raster;
+  dd->cap = Cairo_Cap;
   dd->locator = Cairo_Locator;
   dd->mode = Cairo_Mode;
   dd->metricInfo = Cairo_MetricInfo;
+#if R_GE_version < 7
   dd->getEvent = Cairo_GetEvent;
+#else
+  dd->eventHelper = Cairo_EventHelper;
+#endif
   dd->hasTextUTF8 = TRUE;
   dd->wantSymbolUTF8 = TRUE;
   dd->strWidthUTF8 = Cairo_StrWidth;
@@ -1023,6 +1244,7 @@ configureCairoDevice(pDevDesc dd, CairoDesc *cd, double width, double height, do
   dd->bottom = height;
   dd->top = 0;
 	
+  // Setup font
   fontdesc = getBaseFont(cd);
   pango_font_description_set_size(fontdesc, PANGO_SCALE * ps);
   success = loadFont(fontdesc, cd);
@@ -1035,6 +1257,8 @@ configureCairoDevice(pDevDesc dd, CairoDesc *cd, double width, double height, do
   pango_context_set_font_description(getPangoContext(cd), fontdesc);
   font_metrics(fontdesc, cd, &cw, &ascent, &descent);
 	
+  pango_font_description_free(fontdesc);
+  
   /* starting parameters */
   ps = 2 * (ps / 2);
   dd->startfont = 1; 
@@ -1043,8 +1267,6 @@ configureCairoDevice(pDevDesc dd, CairoDesc *cd, double width, double height, do
   dd->startfill = R_TRANWHITE;
   dd->startlty = LTY_SOLID; 
   dd->startgamma = 1;
-	
-  pango_font_description_free(fontdesc);
 	
   dd->cra[0] = cw;
   dd->cra[1] = ascent + descent;
@@ -1055,8 +1277,8 @@ configureCairoDevice(pDevDesc dd, CairoDesc *cd, double width, double height, do
   dd->yLineBias = 0.1;
 
   /* inches per raster unit */
-  dd->ipr[0] = pixelWidth();
-  dd->ipr[1] = pixelHeight();
+  dd->ipr[0] = 1.0/POINTS_PER_INCH;
+  dd->ipr[1] = 1.0/POINTS_PER_INCH;
 
   /* device capabilities */
   dd->canClip = TRUE;
@@ -1092,7 +1314,7 @@ createCairoDevice(pDevDesc dd, double width, double height, double ps, void *dat
     return FALSE;
   }
 
-  return(configureCairoDevice(dd, cd, width / pixelWidth(), height / pixelHeight(), ps));
+  return(configureCairoDevice(dd, cd, width, height, ps));
 }
 Rboolean
 asCairoDevice(pDevDesc dd, double width, double height, double ps, void *data)
@@ -1151,6 +1373,8 @@ initCairoDevice(double width, double height, double ps, void *data, CairoDeviceC
 }
 
 
+
+// Width and Height are in inches
 void
 do_Cairo(double *in_width, double *in_height, double *in_pointsize, char **surface)
 {
@@ -1166,7 +1390,8 @@ do_Cairo(double *in_width, double *in_height, double *in_pointsize, char **surfa
   }
   ps = *in_pointsize;
  
-  initCairoDevice(width, height, ps, surface, (CairoDeviceCreateFun)createCairoDevice);
+  initCairoDevice(width*POINTS_PER_INCH, height*POINTS_PER_INCH, 
+                  ps, surface, (CairoDeviceCreateFun)createCairoDevice);
 
   vmaxset(vmax);
   /*   return R_NilValue; */
