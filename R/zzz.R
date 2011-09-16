@@ -5,6 +5,7 @@
     dll <- try(library.dynam("cairoDevice", pkgname, libname,
                              DLLpath = dllpath),
                silent = getOption("verbose"))
+    
   }
   else dll <- try(library.dynam("cairoDevice", pkgname, libname),
                   silent = getOption("verbose"))
@@ -32,8 +33,13 @@
     }
 }
 
-.windows_gtk_path <- function()
-  file.path(system.file(package = "cairoDevice"), "gtk", .Platform$r_arch)
+.windows_gtk_path <- function() {
+  if ("RGtk2" %in% rownames(installed.packages()) &&
+      packageVersion("RGtk2") >= "2.20.17")
+    package <- "RGtk2"
+  else package <- "cairoDevice"
+  file.path(system.file(package = package), "gtk", .Platform$r_arch)
+}
 
 .install_system_dependencies <- function()
 {
