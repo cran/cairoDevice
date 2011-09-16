@@ -34,8 +34,7 @@
 }
 
 .windows_gtk_path <- function() {
-  if ("RGtk2" %in% rownames(installed.packages()) &&
-      packageVersion("RGtk2") >= "2.20.17")
+  if (isTRUE(try(packageVersion("RGtk2") >= "2.20.17", silent = TRUE)))
     package <- "RGtk2"
   else package <- "cairoDevice"
   file.path(system.file(package = package), "gtk", .Platform$r_arch)
