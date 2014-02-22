@@ -5,7 +5,6 @@
     dll <- try(library.dynam("cairoDevice", pkgname, libname,
                              DLLpath = dllpath),
                silent = getOption("verbose"))
-    
   }
   else dll <- try(library.dynam("cairoDevice", pkgname, libname),
                   silent = getOption("verbose"))
@@ -18,13 +17,13 @@
   
   #library.dynam("cairoDevice", pkgname, libname)
   if (!.C("loadGTK", success = logical(1), PACKAGE="cairoDevice")$success)
-    message("Note: R session is headless; Cairo device not initialized")
+    packageStartupMessage("Note: R session is headless; Cairo device not initialized")
 
   # register device as being interactive
   deviceIsInteractive("Cairo")
 }
 
-.Last.lib <- function(libname, pkgname)
+.closeDevices <- function()
 {
     devices <- dev.list()
     gtk.devices <- devices[names(devices)=="Cairo"]
@@ -33,12 +32,14 @@
     }
 }
 
-.windows_gtk_path <- function() {
-  if (isTRUE(try(packageVersion("RGtk2") >= "2.20.17", silent = TRUE)))
-    package <- "RGtk2"
-  else package <- "cairoDevice"
-  file.path(system.file(package = package), "gtk", .Platform$r_arch)
+.onUnload <- function(libpath) {
+  .closeDevices()
+  .C("cleanupGTK", PACKAGE = "cairoDevice")
+  library.dynam.unload("cairoDevice", libpath)
 }
+
+.windows_gtk_path <- function()
+  file.path(system.file(package = "cairoDevice"), "gtk", .Platform$r_arch)
 
 .install_system_dependencies <- function()
 {

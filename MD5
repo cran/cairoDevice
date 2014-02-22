@@ -1,7 +1,8 @@
-578ed643bb3f353d8361f7ac912c9b1e *DESCRIPTION
+d14360b4ea2ed5f229b3c8f934c94379 *DESCRIPTION
 9f7181735293bf626569cdc1a007ecde *NAMESPACE
 03ac125648a49c95f5e07af281aa7691 *R/cairoDevice.R
-81dfac35f7202d3ab68d036bc1d48532 *R/zzz.R
+9a15ded8c28895da2f56c4e632928018 *R/zzz.R
+5b41a31b13ddd6bcf77c547569f90880 *cleanup
 984b1756011c571625a483739dd1a9e1 *configure
 06d8917aa325a0cf19c081b84b5bc653 *configure.in
 8c164fdfb73f2796f22ff9ba4ae7de26 *configure.win
@@ -9,11 +10,10 @@
 d29eb55ebba2b8254a4adc231d6e5bb3 *demo/default.R
 6e53046bdc5f02039df83cd375b75307 *demo/embedded.R
 1949bc2afa848d05c28aa4c27fd2aee4 *demo/lattice.R
-10c463153b9f4d790ade07c571b3abb8 *man/Cairo.Rd
+71e011428344844ef6e2d82a3f889c1f *man/Cairo.Rd
 b6d3c640b6325835b35d63729366d689 *man/asCairoDevice.Rd
-7511714f82f971b8edbeb29acd555e1c *src/Makevars
 d1ca0a451f0a1cab45cc73fa51f5a0cd *src/Makevars.in
 600cf87bb0941392b4577956d7f5ed49 *src/Makevars.win
-5e82fafeab5ece7ec37cf6336dec0640 *src/cairoDevice.c
+4940988021bd9005faa0d80343025218 *src/cairoDevice.c
 e9bacad415578fff9315e00e61549e0c *src/cairoDevice.h
-f32f42fefb685bffe088f770039c7543 *src/gtk.c
+303c2a8c73c1fbbd230dbac85ce2f874 *src/gtk.c
