@@ -1,4 +1,4 @@
-e463b3a0f9be9cbac0c58380cde2c9e8 *DESCRIPTION
+aec0964bba8f0c8d1cd42fc8b8433c64 *DESCRIPTION
 9f7181735293bf626569cdc1a007ecde *NAMESPACE
 e0552f1b54abde80dc823f0d9039916d *R/cairoDevice.R
 d09bbea59d31e24b8949d4a31dd7db63 *R/zzz.R
@@ -14,6 +14,6 @@ d29eb55ebba2b8254a4adc231d6e5bb3 *demo/default.R
 bcb3bbedab55adb80f00ca2b11b664e4 *man/asCairoDevice.Rd
 d1ca0a451f0a1cab45cc73fa51f5a0cd *src/Makevars.in
 600cf87bb0941392b4577956d7f5ed49 *src/Makevars.win
-2cdcb3910cee0f4608a67676cc698a1f *src/cairoDevice.c
+d7370869298c83a2a6535903522229fc *src/cairoDevice.c
 e9bacad415578fff9315e00e61549e0c *src/cairoDevice.h
 303c2a8c73c1fbbd230dbac85ce2f874 *src/gtk.c
