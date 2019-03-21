@@ -1,5 +1,5 @@
 Package: cairoDevice
-Version: 2.25
+Version: 2.26
 Title: Embeddable Cairo Graphics Device Driver
 Author: Michael Lawrence
 Depends: R (>= 2.12.0)
@@ -16,6 +16,6 @@ Acknowledgements: Lyndon Drake (based on gtkDevice), Brian Ripley
         Duncan Murdoch (updates for R 2.12)
 License: GPL
 NeedsCompilation: yes
-Packaged: 2018-06-11 14:32:38 UTC; larman
+Packaged: 2019-03-20 13:58:40 UTC; larman
 Repository: CRAN
-Date/Publication: 2018-06-12 13:33:44 UTC
+Date/Publication: 2019-03-21 11:16:05 UTC

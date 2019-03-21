@@ -360,7 +360,7 @@ static void Cairo_EventHelper(pDevDesc dd, int code)
     if (isEnvironment(dd->eventEnv)) {
       SEXP prompt = findVar(install("prompt"), dd->eventEnv);
       if (length(prompt) == 1) {
-        const char* cprompt = CHAR(asChar(prompt));
+	const char* cprompt = CHAR(STRING_ELT(prompt, 0));
         R_WriteConsole(cprompt, strlen(cprompt));
         R_WriteConsole("\n", 1);
         R_FlushConsole();
@@ -1126,18 +1126,18 @@ static void drawText(double x, double y, const char *str,
 		     double rot, double hadj, CairoDesc *cd, const pGEcontext gc)
 {
   PangoLayout *layout;
-  gint ascent, lbearing;
+  gint ascent, lbearing, width;
   cairo_t *cr = cd->cr;
 
   PangoFontDescription *desc = getFont(cd, gc);
 
   layout = layoutText(desc, str, cd);
   
-  text_extents(desc, cd, gc, str, &lbearing, NULL, NULL, &ascent, NULL, FALSE);
+  text_extents(desc, cd, gc, str, &lbearing, NULL, &width, &ascent, NULL, FALSE);
 
   cairo_move_to(cr, x, y);
   cairo_rotate(cr, -1*rot);
-  cairo_rel_move_to(cr, -lbearing, -ascent);
+  cairo_rel_move_to(cr, -lbearing - width*hadj, -ascent);
   setColor(cr, gc->col);
 
   pango_cairo_show_layout(cr, layout);
