@@ -16,8 +16,9 @@
   }
   
   #library.dynam("cairoDevice", pkgname, libname)
-  .C("loadGTK", success = logical(1), PACKAGE="cairoDevice")
-
+  if (!.C("loadGTK", success = logical(1), PACKAGE="cairoDevice")$success)
+      message("R session is headless; GTK+ not initialized.")
+  
   # register device as being interactive
   deviceIsInteractive("Cairo")
 }
@@ -26,8 +27,8 @@
 {
     devices <- dev.list()
     gtk.devices <- devices[names(devices)=="Cairo"]
-    if(length(gtk.devices) > 0) {
-        dev.off(gtk.devices)
+    for (dev in gtk.devices) {
+        dev.off(dev)
     }
 }
 
